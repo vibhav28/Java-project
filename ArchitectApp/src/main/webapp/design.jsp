@@ -206,6 +206,12 @@ body{
     <span>Objects: <b id="sObjs">0</b></span>
     <span>Total: <b id="sTotal">0</b></span>
   </div>
+  <% if (session.getAttribute("userId") != null) { %>
+    <button class="top-btn" onclick="saveDesign()" style="background:var(--accent); color:#fff; border-color:var(--accent);">☁ Save</button>
+    <a href="dashboard.jsp" class="top-btn" style="text-decoration:none; display:flex; align-items:center;">Dashboard</a>
+  <% } else { %>
+    <a href="login.jsp" class="top-btn" style="text-decoration:none; display:flex; align-items:center;">Login to Save</a>
+  <% } %>
   <button class="top-btn" onclick="exportDesign()">💾 Export JSON</button>
   <button class="top-btn danger" onclick="clearAll()">🗑 Clear All</button>
 </div>
@@ -742,6 +748,16 @@ function exportDesign() {
   toast('💾 Design exported!');
 }
 
+async function saveDesign() {
+  toast('☁ Saving...');
+  const data = await fetch(SERVLET + '?action=save', { method:'POST' }).then(r=>r.json());
+  if (data.status === 'saved') {
+      toast('✅ Design saved to cloud!');
+  } else {
+      toast('❌ Error: ' + (data.message || 'Could not save'));
+  }
+}
+
 // ---- Toast ---------------------------------------------------------
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -813,7 +829,36 @@ function animate() {
 
 // ---- Init ----------------------------------------------------------
 async function init() {
-  const data = await getState();
+  const params = new URLSearchParams(window.location.search);
+  const loadId = params.get('load');
+  
+  let data;
+  if (loadId) {
+      const res = await fetch(SERVLET + '?action=load', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'id=' + loadId
+      });
+      data = await res.json();
+      
+      // We must also tell the server to replace the current Session state with this loaded project
+      // so subsequent "add" / "delete" commands modify this project properly.
+      await post({ action:'clear' }); // reset base
+      await post({ action:'rename', name: data.name }); // set name
+      for (const el of data.elements) {
+          await post({
+             action:'add', type:el.type, x:el.x, y:el.y, z:el.z, 
+             width:el.width, height:el.height, depth:el.depth, 
+             rotY:el.rotationY, color:el.color, material:el.material, label:el.label 
+          });
+      }
+      
+      // Re-fetch final unified server state
+      data = await getState();
+  } else {
+      data = await getState();
+  }
+
   projectData = data;
   rebuildScene(data);
   document.getElementById('projectName').value = data.name || 'My Design';

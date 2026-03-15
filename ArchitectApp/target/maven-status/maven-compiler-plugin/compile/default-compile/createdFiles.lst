@@ -1,3 +1,8 @@
+com\architect\dao\UserDAO.class
 com\architect\DesignProject.class
 com\architect\ArchitectServlet.class
+com\architect\db\MongoConnection.class
+com\architect\dao\DesignDAO.class
+com\architect\db\MySQLConnection.class
+com\architect\servlet\AuthServlet.class
 com\architect\DesignElement.class

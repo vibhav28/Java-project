@@ -1,6 +1,10 @@
 package com.architect;
 
+import com.architect.dao.DesignDAO;
+import org.bson.Document;
+
 import javax.servlet.*;
+import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.*;
 import java.io.*;
 
@@ -15,8 +19,14 @@ import java.io.*;
  * POST /design?action=update      → update element property
  * POST /design?action=clear       → clear all (keep floor)
  * POST /design?action=rename      → rename project
+ * POST /design?action=save        → save project JSON to MongoDB (requires auth)
+ * POST /design?action=load        → load project JSON from MongoDB 
+ * POST /design?action=deleteDesign→ delete project JSON from MongoDB 
  */
+// Mapping is defined in web.xml to avoid duplicate mappings when combined with the Tomcat plugin.
 public class ArchitectServlet extends HttpServlet {
+
+    private final DesignDAO designDAO = new DesignDAO();
 
     @Override
     public void init() {
@@ -28,7 +38,7 @@ public class ArchitectServlet extends HttpServlet {
             throws ServletException, IOException {
 
         HttpSession session = req.getSession();
-        ensureProject(session, req.getParameter("author"));
+        ensureProject(session, (String) session.getAttribute("username"));
 
         String action = req.getParameter("action");
 
@@ -45,13 +55,47 @@ public class ArchitectServlet extends HttpServlet {
             throws ServletException, IOException {
 
         HttpSession session = req.getSession();
-        ensureProject(session, null);
+        ensureProject(session, (String) session.getAttribute("username"));
         DesignProject project = getProject(session);
 
         String action = req.getParameter("action");
         if (action == null) action = "";
 
         switch (action) {
+
+            // ---- Save element to MongoDB ----------------------------
+            case "save": {
+                Integer userId = (Integer) session.getAttribute("userId");
+                if (userId != null) {
+                    designDAO.saveDesign(userId, project.getName(), project.toJson());
+                    resp.getWriter().print("{\"status\":\"saved\"}");
+                } else {
+                    resp.getWriter().print("{\"status\":\"error\", \"message\":\"Not logged in\"}");
+                }
+                return; // Early return because we send back simple JSON, not full state
+            }
+
+            // ---- Load element from MongoDB --------------------------
+            case "load": {
+                String designId = param(req, "id", "");
+                Document doc = designDAO.loadDesign(designId);
+                if (doc != null) {
+                    String jsonData = doc.getString("data");
+                    // Optionally, we could parse JSON back to DesignProject, 
+                    // but it's simpler to send to frontend to process.
+                    sendJson(resp, jsonData); 
+                    return;
+                }
+                break;
+            }
+
+            // ---- Delete design from MongoDB -------------------------
+            case "deleteDesign": {
+                String designId = param(req, "id", "");
+                designDAO.deleteDesign(designId);
+                resp.sendRedirect("dashboard.jsp");
+                return;
+            }
 
             // ---- Add element ----------------------------------------
             case "add": {
